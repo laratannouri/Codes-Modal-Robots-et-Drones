@@ -57,7 +57,6 @@ class PurePursuit(object):
             l = [float(x) for x in l.split(',') [0:2]]
             self.waypoints.append(l)
         self.current_point = 0
-        
 
     def pose_callback(self, pose_msg):
         # TODO: find the current waypoint to track using methods mentioned in lecture
@@ -66,7 +65,6 @@ class PurePursuit(object):
         if (self.ind >= len(self.waypoints)):
            self.ind = 0
         self.current_point = self.waypoints[self.ind]
-       # print(self.waypoints[self.ind])
         while (distance(x,y,self.current_point[0], self.current_point[1]) < self.L):
             self.ind += 1
             if (self.ind >= len(self.waypoints)):
@@ -74,7 +72,6 @@ class PurePursuit(object):
             self.current_point = self.waypoints[self.ind]
         y_voulue = self.current_point[1]
         x_voulue = self.current_point[0]
-        
         self.pub_marker(x_voulue, y_voulue)
         # TODO: transform goal point to vehicle frame of reference
         quaternion = np.array([pose_msg.pose.orientation.x, 
@@ -87,7 +84,6 @@ class PurePursuit(object):
         beta = math.pi/2 - alpha
         dist = distance(x_voulue, y_voulue, x, y)
         y_correct = dist * math.cos(beta)
-
         # TODO: calculate curvature/steering angle
         curv = 2*y_correct / self.L**2
         curv = max (curv, -0.4189)
