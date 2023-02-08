@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Jan 20 14:43:29 2023
+
+@author: cosynus8
+"""
+
+#!/usr/bin/env python
+import math
+import numpy as np
+import rospy
+import tf
+from visualization_msgs.msg import Marker
+from geometry_msgs.msg import PoseStamped
+from sensor_msgs.msg import LaserScan
+from ackermann_msgs.msg import AckermannDriveStamped, AckermannDrive
+file = open('porto.csv', 'r')
+lines = file.readlines()
+
+def distance (x1, y1, x2, y2):
+    return math.sqrt(abs((x2-x1)**2 - (y2 - y1)**2))
+
+
+class PurePursuit(object):
+    
+    def pub_marker(self, x, y):
+        marker = Marker()
+
+        marker.header.frame_id = "map"
+        marker.header.stamp = rospy.Time.now()
+        
+        # set shape, Arrow: 0; Cube: 1 ; Sphere: 2 ; Cylinder: 3
+        marker.type = 2
+        marker.id = 0
+        
+        # Set the scale of the marker
+        marker.scale.x = 1.0
+        marker.scale.y = 1.0
+        marker.scale.z = 1.0
+        
+        # Set the color
+        marker.color.r = 1.0
+        marker.color.g = 0.0
+        marker.color.b = 0.0
+        marker.color.a = 1.0
+        
+        # Set the pose of the marker
+        marker.pose.position.x = x
+        marker.pose.position.y = y
+        marker.pose.position.z = 0
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = 0.0
+        marker.pose.orientation.w = 1.0
+        self.marker_pub.publish(marker)
+        
+    def __init__(self):
+        self.pose_sub = rospy.Subscriber("/gt_pose", PoseStamped, self.pose_callback)
+        self.drive_pub = rospy.Publisher('/drive', AckermannDriveStamped, queue_size=10)
+        self.marker_pub = rospy.Publisher("/visualization_marker", Marker, queue_size = 2)
+        self.L = 1
+        self.ind = 0
+        self.waypoints = []
+        for l in lines: 
+            l = l.replace('\n','')
+            l = [float(x) for x in l.split(',') [0:2]]
+            self.waypoints.append(l)
+        self.current_point = 0
+        
+
+    def pose_callback(self, pose_msg):
+        # TODO: find the current waypoint to track using methods mentioned in lecture
+        x = pose_msg.pose.position.x
+        y = pose_msg.pose.position.y
+        if (self.ind >= len(self.waypoints)):
+           self.ind = 0
+        self.current_point = self.waypoints[self.ind]
+       # print(self.waypoints[self.ind])
+        while (distance(x,y,self.current_point[0], self.current_point[1]) < self.L):
+            self.ind += 1
+            if (self.ind >= len(self.waypoints)):
+                self.ind = 0
+            self.current_point = self.waypoints[self.ind]
+        y_voulue = self.current_point[1]
+        x_voulue = self.current_point[0]
+        
+        self.pub_marker(x_voulue, y_voulue)
+        # TODO: transform goal point to vehicle frame of reference
+        quaternion = np.array([pose_msg.pose.orientation.x, 
+                           pose_msg.pose.orientation.y, 
+                           pose_msg.pose.orientation.z, 
+                           pose_msg.pose.orientation.w])
+
+        euler = tf.transformations.euler_from_quaternion(quaternion)
+        alpha = math.atan2(y_voulue - y, x_voulue - x) - euler[2]
+        beta = math.pi/2 - alpha
+        dist = distance(x_voulue, y_voulue, x, y)
+        y_correct = dist * math.cos(beta)
+
+        # TODO: calculate curvature/steering angle
+        curv = 2*y_correct / self.L**2
+        curv = max (curv, -0.4189)
+        curv = min (curv, 0.4189)
+        # TODO: publish drive message, don't forget to limit the steering angle between -0.4189 and 0.4189 radians
+        drive_msg = AckermannDriveStamped()
+        drive_msg.header.stamp = rospy.Time.now()
+        drive_msg.header.frame_id = "pursuit"
+        drive_msg.drive.steering_angle = curv
+        drive_msg.drive.speed = 3
+        self.drive_pub.publish(drive_msg)
+
+def main():
+    rospy.init_node('pure_pursuit_node')
+    pp = PurePursuit()
+    rospy.spin()
+if __name__ == '__main__':
+    main()
